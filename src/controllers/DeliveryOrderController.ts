@@ -1,26 +1,23 @@
+// controllers/DeliveryOrderController.ts
 import { Request, Response } from "express";
 import { db } from "../config/firebase";
-import { Delivery } from "../models/Delivery";
 
-export const getDelivery = async (req: Request, res: Response) => {
+
+export const getMyDeliveries = async (req: Request, res: Response) => {
   try {
     const snapshot = await db
       .collection("delivery")
-      .where("firebaseId", "==", req.firebaseId)
+      .where("userId", "==", req.firebaseId)
       .get();
 
-    const delivery: Delivery[] = snapshot.docs.map((doc) => {
-      const deliveryData = doc.data();
+    const deliveries = snapshot.docs.map((doc) => ({
+      deliveryId: doc.id,
+      ...doc.data(),
+    }));
 
-      return {
-        deliveryId: doc.id,
-        ...deliveryData,
-      } as Delivery;
-    });
-
-    res.json(delivery);
+    res.status(200).json({ data: deliveries });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Something went wrong" });
+    res.status(500).json({ message: "Failed to fetch deliveries" });
   }
 };
+

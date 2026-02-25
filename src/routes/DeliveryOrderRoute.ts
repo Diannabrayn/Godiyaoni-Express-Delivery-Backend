@@ -1,10 +1,10 @@
 import express from "express";
 import { firebaseAuth } from "../middleware/auth";
-import { getDelivery } from "../controllers/DeliveryOrderController";
+import { getMyDeliveries } from "../controllers/DeliveryOrderController";
 
 
 const router = express.Router();
 
-router.get("/", firebaseAuth, getDelivery);
+router.get("/", firebaseAuth, getMyDeliveries);
 
 export default router;

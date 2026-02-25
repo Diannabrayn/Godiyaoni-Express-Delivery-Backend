@@ -1,27 +1,40 @@
-// MenuItem Interface
-interface MenuItem {
+
+export interface MenuItem {
   id: string;
   name: string;
+  nameLower: string;
   price: number;
+  imageUrl: string;
 }
 
-// Restaurant Interface (with imageUrl)
 export interface Restaurant {
   restaurantId: string;
-  firebaseId: string; // creator ID
-  User: string; // Firebase UID or reference to User
+  firebaseId: string;
+  userId: string;
+
   restaurantName: string;
-  restaurantNameLower: string; // <-- add this
+  restaurantNameLower: string;
+
+   address: {
+    text: string;
+    lat: number;
+    lng: number;
+  };
+
   city: string;
-  cityLower: string; // <-- add this
+  cityLower: string;
   country: string;
+
+  deliveryTimeMinutes: number;
   deliveryPrice: number;
-  estimatedDeliveryTime: number;
+
+
   cuisines: string[];
+  cuisinesLower: string[];
+
   menuItem: MenuItem[];
+
   imageUrl: string;
   lastUpdated: FirebaseFirestore.Timestamp;
 }
 
-
-export {MenuItem ,}

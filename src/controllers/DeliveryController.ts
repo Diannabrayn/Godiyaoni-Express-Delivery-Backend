@@ -1,118 +1,142 @@
-import { NextFunction, Request, Response } from "express";
+import { Request, Response } from "express";
 import { firestore } from "firebase-admin";
-import { Delivery } from "../models/Delivery";
 import { v2 as cloudinary } from "cloudinary";
 import axios from "axios";
 import crypto from "crypto";
 import { admin } from "../config/firebase";
-
+import { calculateDeliveryPrice, estimatedDeliveryTime } from "../config/deliveryPrice";
+import { getDistanceMeters } from "../config/deliveryDistance";
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY as string;
-const FRONTEND_URL = process.env.FRONTEND_URL as string;
-
 const db = admin.firestore();
 
-const uploadImage = async (file: Express.Multer.File) => {
-  const image = file;
-  const base64Image = Buffer.from(image.buffer).toString("base64");
-  const dataURI = `data:${image.mimetype};base64,${base64Image}`;
+/* ================= IMAGE UPLOAD ================= */
+const uploadImage = async (file: Express.Multer.File): Promise<string> => {
+  const base64Image = Buffer.from(file.buffer).toString("base64");
+  const dataURI = `data:${file.mimetype};base64,${base64Image}`;
 
   const uploadResponse = await cloudinary.uploader.upload(dataURI);
-  return uploadResponse.url;
+  return uploadResponse.secure_url;
 };
 
-// Create delivery
 export const createMyDelivery = async (
   req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+  res: Response
+): Promise<Response> => {
   try {
-    const imageUrl = await uploadImage(req.file as Express.Multer.File);
+    /* Parse multipart JSON */
+    const parsed =
+      typeof req.body.data === "string"
+        ? JSON.parse(req.body.data)
+        : req.body;
 
-    const newDelivery: Delivery = {
-      firebaseId: req.firebaseId,
-      sender: {
-        name: req.body["sender.name"],
-        phone: req.body["sender.phone"],
-        pickupAddress: req.body["pickupAddress"],
-      },
-      receiver: {
-        name: req.body["receiver.name"],
-        phone: req.body["receiver.phone"],
-        dropoffAddress: req.body["dropoffAddress"],
-      },
-      package: {
-        description: req.body["package.description"],
-        weight: Number(req.body["package.weight"]),
-        value: Number(req.body["package.value"]),
-      },
-      deliveryType: req.body["deliveryType"],
-      price: Number(req.body["price"] ?? 1500),
-      estimatedDeliveryTime: Number(req.body["estimatedDeliveryTime"] ?? 30),
-      status: "placed",
-      createdAt: firestore.Timestamp.now(),
-      paymentReference: req.body["paymentReference"] || "",
+    const { sender, receiver, package: pkg, deliveryType } = parsed;
+
+    if (!sender?.address || !receiver?.address) {
+      return res
+        .status(400)
+        .json({ message: "Sender & receiver address required" });
+    }
+
+    if (
+      !sender.address.lat ||
+      !sender.address.lng ||
+      !receiver.address.lat ||
+      !receiver.address.lng
+    ) {
+      return res
+        .status(400)
+        .json({ message: "Invalid address coordinates" });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: "Delivery image is required" });
+    }
+
+    /* Upload image */
+    const imageUrl = await uploadImage(req.file);
+
+    /* Distance */
+    const distanceMeters = await getDistanceMeters(
+      sender.address,
+      receiver.address
+    );
+
+    /* Price */
+    const price = calculateDeliveryPrice(distanceMeters, deliveryType);
+
+   const deliveryTimeMinutes = estimatedDeliveryTime(
+  distanceMeters,
+  deliveryType
+);
+    /* Build delivery */
+    const delivery = {
+      userId: (req as any).firebaseId,
+      sender,
+      receiver,
+      package: pkg,
+      distanceMeters,
+      price,
+      deliveryType,
+      estimatedDeliveryTime : deliveryTimeMinutes,
       imageUrl,
-      lastUpdated: firestore.Timestamp.fromDate(new Date()),
-      deliveryId: "", // will be set after creation
+      status: "placed",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
-    // Create doc in Firestore
-    const docRef = await db.collection("delivery").add(newDelivery);
+  const ref = await db.collection("delivery").add(delivery);
 
-    // Update doc with its own ID
-    await docRef.update({ deliveryId: docRef.id });
+// 🔥 Fetch the created document
+const doc = await ref.get();
+const data = doc.data();
 
-    res.status(201).json({
-      ...newDelivery,
-      deliveryId: docRef.id,
-    });
+return res.status(201).json({
+  deliveryId: doc.id,
+  ...data,
+  createdAt: data?.createdAt?.toDate?.() ?? null,
+  lastUpdated: data?.lastUpdated?.toDate?.() ?? null,
+});
   } catch (error) {
-    console.error("Create delivery failed:", error);
-    res.status(500).json({ message: "Something went wrong" });
+    return res.status(500).json({ message: "Failed to create delivery" });
   }
 };
 
 
+/* ================= PAYSTACK CHECKOUT ================= */
 export const createDeliveryCheckoutSession = async (
   req: Request,
   res: Response
-): Promise<void> => {
+): Promise<Response> => {
   try {
     const { deliveryId } = req.params;
 
     if (!deliveryId) {
-      res.status(400).json({ message: "Missing deliveryId" });
-      return;
+      return res.status(400).json({ message: "Missing deliveryId" });
     }
 
     const deliverySnap = await db.collection("delivery").doc(deliveryId).get();
 
     if (!deliverySnap.exists) {
-      res.status(404).json({ message: "Delivery not found" });
-      return;
+      return res.status(404).json({ message: "Delivery not found" });
     }
 
     const deliveryData = deliverySnap.data();
+
     if (!deliveryData) {
-      res.status(404).json({ message: "Delivery data missing" });
-      return;
+      return res.status(404).json({ message: "Delivery data missing" });
     }
 
-    // ✅ Create Paystack transaction
     const response = await axios.post(
       "https://api.paystack.co/transaction/initialize",
       {
-        email: deliveryData.sender?.email || "test@fake.com", // Must provide valid email
-        amount: Math.round(Number(deliveryData.price) * 100), // Paystack requires amount in kobo
+        email: req.body.email ?? "fallback@test.com",
+        amount: Math.round(Number(deliveryData.price) * 100),
         reference: `DELIVERY_${deliveryId}_${Date.now()}`,
-        callback_url: `${FRONTEND_URL}/delivery-status?deliveryId=${deliveryId}`,
+        callback_url: `godiyaoni://delivery/${deliveryId}`,
+
         metadata: {
           deliveryId,
-          firebaseId: deliveryData.firebaseId,
-          sender: deliveryData.sender,
-          receiver: deliveryData.receiver,
+          firebaseId: deliveryData.userId,
         },
       },
       {
@@ -123,57 +147,62 @@ export const createDeliveryCheckoutSession = async (
       }
     );
 
-    res.json({ url: response.data.data.authorization_url });
+    return res.json({ url: response.data.data.authorization_url });
   } catch (error: any) {
-    console.error("Paystack error:", error.response?.data || error.message);
-    res.status(500).json({ message: error.message || "Internal server error" });
+    
+    return res.status(500).json({ message: error.message || "Internal server error" });
   }
 };
 
-export const getDeliveryOrder = async (req: Request, res: Response) => {
+/* ================= GET DELIVERY BY ID ================= */
+export const getDeliveryById = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
   try {
     const { deliveryId } = req.params;
-    const docRef = db.collection("delivery").doc(deliveryId);
-    const doc = await docRef.get();
+
+    const doc = await db.collection("delivery").doc(deliveryId).get();
 
     if (!doc.exists) {
-      res.status(404).json({ message: "Delivery not found" });
-      return;
+      return res.status(404).json({ message: "Delivery not found" });
     }
 
-    res.json({ deliveryId: doc.id, ...doc.data() });
+    return res.json({
+      deliveryId: doc.id,
+      ...doc.data(),
+    });
   } catch (error) {
-    console.error("Error fetching delivery:", error);
-    res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ message: "Failed to fetch delivery" });
   }
 };
 
+/* ================= PAYSTACK WEBHOOK ================= */
 export const paystackDeliveryWebhookHandler = async (
   req: Request,
   res: Response
-): Promise<void> => {
+): Promise<Response> => {
   try {
     const signature = req.headers["x-paystack-signature"] as string;
 
     if (!signature) {
-      res.status(400).send("Missing signature");
-      return; // ✅ Added return
+      return res.status(400).send("Missing signature");
     }
 
     const hash = crypto
       .createHmac("sha512", PAYSTACK_SECRET_KEY)
-      .update(req.body) // raw buffer
+      .update(req.body)
       .digest("hex");
 
     if (hash !== signature) {
-      res.status(401).send("Invalid signature");
-      return; // ✅ Added return
+      return res.status(401).send("Invalid signature");
     }
 
     const event = JSON.parse((req.body as Buffer).toString("utf8"));
 
     if (event.event === "charge.success") {
       const deliveryId = event.data.metadata?.deliveryId;
+
       if (deliveryId) {
         await db.collection("delivery").doc(deliveryId).update({
           status: "paid",
@@ -183,13 +212,9 @@ export const paystackDeliveryWebhookHandler = async (
       }
     }
 
-    res.sendStatus(200);
-    return; // ✅ Added return
-  } catch (error: any) {
+    return res.sendStatus(200);
+  } catch (error) {
     console.error("Webhook Error:", error);
-    res.sendStatus(500);
-    return; // ✅ Added return
+    return res.sendStatus(500);
   }
 };
-
-

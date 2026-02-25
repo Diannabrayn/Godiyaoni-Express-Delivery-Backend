@@ -1,176 +1,288 @@
+
 import { Request, Response } from "express";
 import crypto from "crypto";
+import axios from "axios";
 import { db } from "../config/firebase";
 import { Restaurant } from "../models/restaurant";
-import { firestore } from "firebase-admin";
 import { Order } from "../models/Order";
-import axios from "axios";
+import { firestore } from "firebase-admin";
+import { getDistanceMeters } from "../config/deliveryDistance";
+import {
+  calculateDeliveryPrice,
+  estimatedDeliveryTime,
+} from "../config/deliveryPrice";
 
-const FRONTEND_URL = process.env.FRONTEND_URL as string;
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY!;
 
-
-
+/* =====================================================
+   GET MY ORDERS
+===================================================== */
 
 const getMyOrders = async (req: Request, res: Response) => {
   try {
+    const firebaseId = req.firebaseId;
+
+    if (!firebaseId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
     const snapshot = await db
       .collection("orders")
-      .where("userId", "==", req.firebaseId)
+      .where("userId", "==", firebaseId)
       .get();
 
     const orders: Order[] = snapshot.docs.map((doc) => {
-      const orderData = doc.data();
+      const data = doc.data();
 
       return {
         id: doc.id,
-        ...orderData,
-        restaurant: orderData.restaurant || {
-          restaurantName: "Unknown Restaurant",
-          imageUrl: "/placeholder.png",
-          estimatedDeliveryTime: 0,
-        },
+        ...data,
+        cartItems: data.cartItems.map((item: any) => ({
+          ...item,
+          quantity: Number(item.quantity),
+        })),
       } as Order;
     });
 
-    res.json(orders);
+    return res.status(200).json({ data: orders });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Something went wrong" });
-  }
-};
-
-// ✅ Paystack Webhook Handler
-const paystackOrderWebhookHandler = async (req: Request, res: Response) => {
-  try {
-    const secret = PAYSTACK_SECRET_KEY;
-
-    const signature = req.headers["x-paystack-signature"] as string;
-    if (!signature) {
-       res.status(400).send("Missing Paystack signature");
-    }
-
-    // ✅ Verify signature with raw Buffer
-    const hash = crypto
-      .createHmac("sha512", secret)
-      .update(req.body) // req.body is Buffer now
-      .digest("hex");
-
-    if (hash !== signature) {
-      console.error("❌ Invalid Paystack signature");
-     res.status(401).send("Invalid signature");
-    }
-
-    // ✅ Parse the JSON event
-    const event = JSON.parse((req.body as Buffer).toString("utf8"));
-    console.log("🚀 Paystack Webhook Event:", event);
-
-    if (event.event === "charge.success") {
-      const metadata = event.data.metadata;
-      const orderId = metadata?.orderId;
-
-      if (orderId) {
-        await db
-          .collection("orders")
-          .doc(orderId)
-          .update({
-            status: "paid",
-            totalAmount: event.data.amount / 100,
-            paymentReference: event.data.reference,
-            paidAt: firestore.Timestamp.now(),
-          });
-        console.log(`✅ Order ${orderId} marked as PAID`);
-      }
-    }
-
-    res.sendStatus(200);
-  } catch (error) {
-    console.error("Webhook Error:", error);
-    res.sendStatus(500);
+    console.error("Get orders error:", error);
+    return res.status(500).json({ message: "Something went wrong" });
   }
 };
 
 
+/* =====================================================
+   CREATE CHECKOUT SESSION
+===================================================== */
 
-const createCheckoutSession = async (req: Request, res: Response) => {
+const createCheckoutSession = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
   try {
+    const firebaseId = req.firebaseId;
+
+    if (!firebaseId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
     const { cartItems, deliveryDetails, restaurantId } = req.body;
 
-    if (!restaurantId) {
-      throw new Error("Restaurant ID is required");
+    if (!restaurantId || !cartItems?.length || !deliveryDetails) {
+      return res.status(400).json({ message: "Invalid checkout data" });
     }
 
-    // ✅ Fetch restaurant by its doc ID
-    const restaurantRef = db.collection("restaurant").doc(restaurantId);
-    const restaurantSnap = await restaurantRef.get();
+    /* =========================
+       FETCH RESTAURANT
+    ========================= */
+
+    const restaurantSnap = await db
+      .collection("restaurant")
+      .doc(restaurantId)
+      .get();
 
     if (!restaurantSnap.exists) {
-      throw new Error("Restaurant not found");
+      return res.status(404).json({ message: "Restaurant not found" });
     }
 
     const restaurant = restaurantSnap.data() as Restaurant;
+/* =========================
+   DISTANCE (DELIVERY ONLY)
+========================= */
 
-    // ✅ Calculate total amount (items + delivery fee)
-    const totalAmount =
-      cartItems.reduce((sum: number, item: any) => {
-        const menuItem = restaurant.menuItem.find(
-          (m) => m.id === item.menuItemId
-        );
-        return (
-          sum + (menuItem ? Number(menuItem.price) * Number(item.quantity) : 0)
-        );
-      }, 0) + (restaurant.deliveryPrice || 0);
+let distanceMeters: number | null = null;
 
-    // ✅ Create a new Firestore order
-    const orderDocRef = db.collection("orders").doc();
+if (deliveryDetails.orderType === "delivery") {
+  if (
+    deliveryDetails.addressLine1?.lat == null ||
+    deliveryDetails.addressLine1?.lng == null
+  ) {
+    return res.status(400).json({
+      message: "Delivery address coordinates missing",
+    });
+  }
 
-    const newOrder = {
-      id: orderDocRef.id,
+  if (
+    restaurant.address?.lat == null ||
+    restaurant.address?.lng == null
+  ) {
+    return res.status(500).json({
+      message: "Restaurant location not configured",
+    });
+  }
+
+  distanceMeters = await getDistanceMeters(
+    deliveryDetails.addressLine1,
+    restaurant.address
+  );
+}
+
+/* =========================
+   DELIVERY PRICE & TIME
+========================= */
+
+const deliveryPrice =
+  deliveryDetails.orderType === "delivery" && distanceMeters !== null
+    ? calculateDeliveryPrice(
+        distanceMeters,
+        deliveryDetails.deliveryType ?? "standard"
+      )
+    : 0;
+
+const deliveryTimeMinutes =
+  deliveryDetails.orderType === "delivery" && distanceMeters !== null
+    ? estimatedDeliveryTime(
+        distanceMeters,
+        deliveryDetails.deliveryType ?? "standard"
+      )
+    : 0;
+
+
+    /* =========================
+       ITEMS TOTAL
+    ========================= */
+
+    const itemsTotal = cartItems.reduce((sum: number, item: any) => {
+      const menuItem = restaurant.menuItem.find(
+        (m) => m.id === item.id
+      );
+
+      return menuItem
+        ? sum + menuItem.price * Number(item.quantity)
+        : sum;
+    }, 0);
+
+    const totalAmount = itemsTotal + deliveryPrice;
+
+    /* =========================
+       GET USER EMAIL
+    ========================= */
+
+    const userSnap = await db.collection("users").doc(firebaseId).get();
+
+    const userEmail =
+      userSnap.exists && userSnap.data()?.email
+        ? userSnap.data()!.email
+        : "customer@godiyaoni.com";
+
+    /* =========================
+       CREATE ORDER
+    ========================= */
+
+    const orderRef = db.collection("orders").doc();
+
+    const newOrder: Order = {
+      id: orderRef.id,
+      userId: firebaseId,
       restaurantId,
-      restaurant,
-      userId: req.firebaseId, // comes from auth middleware
-      status: "placed",
+   restaurantSnapshot: {
+    name: restaurant.restaurantName,
+    imageUrl: restaurant.imageUrl,
+    addressText: restaurant.address.text,
+    lat: restaurant.address.lat,
+    lng: restaurant.address.lng,
+  },
+
+      cartItems: cartItems.map((i: any) => {
+  const menuItem = restaurant.menuItem.find(
+    (m) => m.id === i.id
+  );
+
+  return {
+    id: i.id,
+    name: menuItem?.name ?? "Unknown item",
+    price: menuItem?.price ?? 0,
+    quantity: Number(i.quantity),
+    imageUrl: menuItem?.imageUrl,
+  };
+}),
+
       deliveryDetails,
-      cartItems,
+      deliveryType: deliveryDetails.deliveryType ?? null,
+      orderType: deliveryDetails.orderType,
+      deliveryPrice,
+      deliveryTimeMinutes,
+
+      status: "placed",
       totalAmount,
+
       createdAt: firestore.Timestamp.now(),
     };
 
-    await orderDocRef.set(newOrder);
+    await orderRef.set(newOrder);
 
-    // ✅ Initialize Paystack payment
-    const response = await axios.post(
+    /* =========================
+       PAYSTACK INITIALIZATION
+    ========================= */
+
+    const callbackUrl = `godiyaoni://CurrentOrderStatusScreen/${orderRef.id}`;
+
+    const paystackRes = await axios.post(
       "https://api.paystack.co/transaction/initialize",
       {
-        email: deliveryDetails.email,
-        amount: Math.round(totalAmount * 100), // Paystack expects kobo
-        reference: `ORDER_${Date.now()}`,
-        callback_url: `${FRONTEND_URL}/order-status`,
+        email: userEmail,
+        amount: Math.round(totalAmount * 100),
+        callback_url: callbackUrl,
         metadata: {
-          restaurant,
-          cartItems,
-          deliveryDetails,
-          orderId: orderDocRef.id,
-          userId: req.firebaseId,
+          orderId: orderRef.id,
           restaurantId,
+          userId: firebaseId,
         },
       },
       {
         headers: {
           Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-          "Content-Type": "application/json",
         },
       }
     );
 
-    res.json({ url: response.data.data.authorization_url });
+    return res.status(200).json({
+      url: paystackRes.data.data.authorization_url,
+    });
   } catch (error: any) {
-    console.error("Paystack error:", error.response?.data || error.message);
-    res.status(500).json({ message: error.message });
+    console.error("Checkout error:", error.response?.data || error.message);
+    return res.status(500).json({ message: "Checkout failed" });
   }
 };
 
+/* =====================================================
+   PAYSTACK WEBHOOK
+===================================================== */
 
+const paystackOrderWebhookHandler = async (req: Request, res: Response) => {
+  try {
+    const signature = req.headers["x-paystack-signature"] as string;
+
+    const hash = crypto
+      .createHmac("sha512", PAYSTACK_SECRET_KEY)
+      .update(req.body)
+      .digest("hex");
+
+    if (hash !== signature) {
+      return res.status(401).send("Invalid signature");
+    }
+
+    const event = JSON.parse(req.body.toString("utf8"));
+
+    if (event.event === "charge.success") {
+      const orderId = event.data?.metadata?.orderId;
+
+      if (orderId) {
+        await db.collection("orders").doc(orderId).update({
+          status: "paid",
+          paymentReference: event.data.reference,
+          updatedAt: firestore.Timestamp.now(),
+        });
+      }
+    }
+
+    return res.sendStatus(200);
+  } catch (error) {
+    console.error("Webhook error:", error);
+    return res.sendStatus(500);
+  }
+};
 
 export default {
   getMyOrders,

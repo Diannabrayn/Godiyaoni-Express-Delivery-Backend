@@ -1,6 +1,8 @@
-// types/Order.ts
+import { firestore } from "firebase-admin";
 
-import { Restaurant } from "./restaurant";
+/* =====================
+   ORDER STATUS
+===================== */
 
 export type OrderStatus =
   | "placed"
@@ -9,28 +11,78 @@ export type OrderStatus =
   | "outForDelivery"
   | "delivered";
 
+/* =====================
+   COORDINATES
+===================== */
+
+export type Coordinates = {
+  text: string;
+  lat: number;
+  lng: number;
+};
+
+/* =====================
+   CART ITEM
+===================== */
+
 export interface CartItem {
   menuItemId: string;
-  quantity: number;
   name: string;
+  quantity: number;
+  price?: number; // optional safety
+  imageurl?: string;
 }
 
+/* =====================
+   DELIVERY DETAILS
+   (NO EMAIL HERE ❌)
+===================== */
+
 export interface DeliveryDetails {
-  email: string;
   name: string;
-  addressLine1: string;
-  phone: number;
-  city: string;
+  phone: string;
+
+  orderType: "delivery" | "takeaway" | "dining";
+
+  // Only required for delivery
+  addressLine1?: Coordinates;
+  city?: string;
+  country?: string;
+}
+
+/* =====================
+   ORDER
+===================== */
+
+export interface RestaurantSnapshot {
+  name: string;
+  imageUrl?: string;
+  addressText?: string;
+  lat: number;
+  lng: number;
 }
 
 export interface Order {
-  id: string; // Optional, Firestore document ID
-  restaurant: Restaurant;
+  id: string;
   userId: string;
-  deliveryDetails: DeliveryDetails;
+  restaurantId: string;
+
+  restaurantSnapshot: RestaurantSnapshot;
+
   cartItems: CartItem[];
-  paymentReference?: string;
+  deliveryDetails: DeliveryDetails;
+
+  orderType: "delivery" | "takeaway" | "dining";
+  deliveryType?: "express" | "same-day" | "standard";
+
+  distanceMeters?: number;
+  deliveryPrice: number;
+  deliveryTimeMinutes: number;
+
   totalAmount: number;
   status: OrderStatus;
-  createdAt: FirebaseFirestore.Timestamp;
+  paymentReference?: string;
+
+  createdAt: firestore.Timestamp;
+  updatedAt?: firestore.Timestamp;
 }

@@ -1,29 +1,37 @@
 import { firestore } from "firebase-admin";
 
+export type Coordinates = {
+  text: string;
+  lat: number;
+  lng: number;
+};
+
 export interface Delivery {
   deliveryId: string;
-  firebaseId: string;
+  userId: string | null;
+
   sender: {
     name: string;
     phone: string;
-    pickupAddress: string;
+    email: string;
+    address: Coordinates;
   };
+
   receiver: {
     name: string;
     phone: string;
-    dropoffAddress: string;
+    address: Coordinates;
   };
-  package: {
-    description: string;
-    weight: number;
-    value: number;
-  };
+
+  distanceMeters: number;
+  estimatedDeliveryTime: number;
   deliveryType: "standard" | "express" | "same-day";
   price: number;
-  estimatedDeliveryTime: number;
+
   status: "placed" | "paid" | "inProgress" | "outForDelivery" | "delivered";
+  paymentReference?: string;
+
   createdAt: firestore.Timestamp;
-  lastUpdated: firestore.Timestamp;
-  paymentReference: string;
-  imageUrl: string;
+  lastUpdated?: firestore.Timestamp;
 }
+

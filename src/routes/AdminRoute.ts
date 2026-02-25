@@ -15,10 +15,12 @@ const upload = multer({
   },
 })
 
+router.get("/", firebaseAuth, AdminController.getAdmin);
+
 router.post(
   "/restaurant",
   firebaseAuth,
-  upload.single("imageFile"),
+  upload.single("image"),
   validateMyRestaurantrequest,
   AdminController.createAdminRestaurant
 );
@@ -31,17 +33,10 @@ router.put(
   AdminController.updateAdminRestaurant
 );
 
-router.get(
-  "/restaurant",
-  firebaseAuth,
-  AdminController.getRestaurantsWithOrders
-);
+router.get("/restaurant", firebaseAuth, AdminController.getAllAdminRestaurant);
 
-router.get(
-  "/restaurant",
-  firebaseAuth,
-  AdminController.getAdminRestaurant
-);
+// Orders
+router.get("/orders", firebaseAuth, AdminController.getAllAdminOrders);
 
 router.patch(
   "/orders/:orderId/status",
@@ -57,5 +52,16 @@ router.patch(
   AdminController.updateAdminDeliveryStatus
 );
 
+router.get(
+  "/restaurants",
+  firebaseAuth,
+  AdminController.getAdminRestaurant
+);
+
+router.get(
+  "/restaurantsss",
+  firebaseAuth,
+  AdminController.getRestaurantsWithOrders
+);
 
 export default router;
