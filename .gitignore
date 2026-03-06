@@ -2,13 +2,5 @@
 dist/
 node_modules/
 
-
-# Firebase Admin SDK keys
-src/config/serviceAccountKey.json
-lib/config/serviceAccountKey.json
-lib/config/godiyaoni-express-delivery-firebase-adminsdk-fbsvc-afec41ad99-*.json
-scr/config/godiyaoni-express-delivery-firebase-adminsdk-fbsvc-afec41ad99-*.json
-
 src/config/*.json
-
-src/config/serviceAccountKey.json
+src/config/godiyaoni-express-delivery-firebase-adminsdk-fbsvc-afec41ad99.json
