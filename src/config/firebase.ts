@@ -17,3 +17,5 @@ async function makeAdmin(uid: string): Promise<void> {
 const db = admin.firestore();
 
 export { admin, db, makeAdmin };
+
+// updated
