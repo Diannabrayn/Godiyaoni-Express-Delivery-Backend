@@ -1,12 +1,12 @@
 import * as admin from "firebase-admin";
-import serviceAccountKey from "./godiyaoni-express-delivery-firebase-adminsdk-fbsvc-afec41ad99.json";
 
-// Initialize Firebase Admin SDK
 if (!admin.apps.length) {
+  const serviceAccount = JSON.parse(
+    process.env.FIREBASE_SERVICE_ACCOUNT_KEY as string
+  );
+
   admin.initializeApp({
-    credential: admin.credential.cert(
-      serviceAccountKey as admin.ServiceAccount
-    ),
+    credential: admin.credential.cert(serviceAccount),
   });
 }
 
@@ -17,5 +17,3 @@ async function makeAdmin(uid: string): Promise<void> {
 const db = admin.firestore();
 
 export { admin, db, makeAdmin };
-
-// updated
