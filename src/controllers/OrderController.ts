@@ -256,14 +256,14 @@ const paystackOrderWebhookHandler = async (req: Request, res: Response) => {
 
     const hash = crypto
       .createHmac("sha512", PAYSTACK_SECRET_KEY)
-      .update(req.body)
+      .update(req.body as Buffer)
       .digest("hex");
 
     if (hash !== signature) {
       return res.status(401).send("Invalid signature");
     }
 
-    const event = JSON.parse(req.body.toString("utf8"));
+    const event = JSON.parse((req.body as Buffer).toString("utf8"));
 
     if (event.event === "charge.success") {
       const orderId = event.data?.metadata?.orderId;

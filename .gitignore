@@ -7,7 +7,7 @@ node_modules/
 src/config/serviceAccountKey.json
 lib/config/serviceAccountKey.json
 lib/config/godiyaoni-express-delivery-firebase-adminsdk-*.json
-src/config/godiyaoni-express-delivery-firebase-adminsdk-*.json
+scr/godiyaoni-express-delivery-firebase-adminsdk-fbsvc-afec41ad99-*.json
 
 src/config/*.json
 

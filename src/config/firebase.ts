@@ -1,5 +1,5 @@
 import * as admin from "firebase-admin";
-import serviceAccountKey from "./serviceAccountKey.json";
+import serviceAccountKey from "./godiyaoni-express-delivery-firebase-adminsdk-fbsvc-afec41ad99.json";
 
 // Initialize Firebase Admin SDK
 if (!admin.apps.length) {

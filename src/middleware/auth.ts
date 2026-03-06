@@ -1,21 +1,26 @@
 import { NextFunction, Request, Response } from "express";
 import * as admin from "firebase-admin";
 
-
 declare global {
   namespace Express {
     interface Request {
       firebaseId: string;
       email?: string;
+      role?: "user" | "admin" | "super-admin";
     }
   }
 }
 
+/**
+ * Firebase authentication middleware
+ * - Verifies ID token
+ * - Attaches uid, email, and role (from custom claims)
+ */
 const firebaseAuth = async (
   req: Request,
   res: Response,
   next: NextFunction
-) => {
+): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
 
@@ -24,43 +29,62 @@ const firebaseAuth = async (
       return;
     }
 
-    const idtoken = authHeader.split(" ")[1];
-    const decodedToken = await admin.auth().verifyIdToken(idtoken);
+    const idToken = authHeader.split(" ")[1];
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
 
-    // Attach firebaseId and email to request object
     req.firebaseId = decodedToken.uid;
     req.email = decodedToken.email || undefined;
+    req.role = (decodedToken.role as any) || "user"; // 🔑 FIX
 
     next();
   } catch (error) {
+    console.error("Auth error:", error);
     res.status(403).json({ message: "Invalid or expired token" });
     return;
   }
 };
 
-import { db } from "../config/firebase";
-
-export const requireSuperAdmin = async (req: Request, res: Response) => {
-  try {
-    
-    const firebaseId = (req as any).firebaseId;
-    const adminDoc = await db.collection("admin").doc(firebaseId).get();
-
-    if (!adminDoc.exists) {
-       res.status(403).json({ message: "Not an admin" });
-       return; 
-    }
-
-    const adminData = adminDoc.data();
-    if (adminData?.role !== "super-admin") {
-      res.status(403).json({ message: "Super admin only" });
-      return;
-    }
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Authorization failed" });
+/**
+ * Super admin authorization middleware
+ * ✅ SECURE: Uses custom claims, not Firestore
+ */
+export const requireSuperAdmin = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void => {
+  if (!req.firebaseId) {
+    res.status(401).json({ message: "Unauthorized" });
+    return;
   }
+
+  if (req.role !== "super-admin") {
+    res.status(403).json({ message: "Super admin only" });
+    return;
+  }
+
+  next();
 };
 
-export  { firebaseAuth };
+/**
+ * Admin OR Super Admin middleware (optional but useful)
+ */
+export const requireAdmin = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void => {
+  if (!req.firebaseId) {
+    res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+
+  if (req.role !== "admin" && req.role !== "super-admin") {
+    res.status(403).json({ message: "Admin only" });
+    return;
+  }
+
+  next();
+};
+
+export { firebaseAuth };

@@ -191,7 +191,7 @@ export const paystackDeliveryWebhookHandler = async (
 
     const hash = crypto
       .createHmac("sha512", PAYSTACK_SECRET_KEY)
-      .update(req.body)
+      .update(req.body as Buffer)
       .digest("hex");
 
     if (hash !== signature) {
