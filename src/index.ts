@@ -1,9 +1,8 @@
-
 import * as functions from "firebase-functions";
 import express, { Request, Response } from "express";
 import cors from "cors";
 import "dotenv/config";
-import { admin } from "./config/firebase"; // ✅ Correctly importing Firebase
+import { admin } from "./config/firebase";
 import MyUserRoute from "./routes/MyUserRoute";
 import { v2 as cloudinary } from "cloudinary";
 import MyRestaurantRoute from "./routes/MyRestaurantRoute";
@@ -20,14 +19,13 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-
 const app = express();
 
 // Middleware
 app.use(express.json());
-app.use(cors()); // You can customize this if needed
+app.use(cors());
 
-// Health check route
+// Health check
 app.get("/health", async (_req: Request, res: Response) => {
   res.send({ message: "Health check passed!" });
 });
@@ -41,10 +39,9 @@ app.use("/api/order", OrderRoutes);
 app.use("/api/delivery", DeliveryRoutes);
 app.use("/api/delivery", DeliveryOrderRoute);
 
+// Firestore test
+const db = admin.firestore();
 
-
-// Firestore Example Usage
-const db = admin.firestore(); // ✅ Correct way to access Firestore
 app.get("/test-firestore", async (_req: Request, res: Response) => {
   try {
     const snapshot = await db.collection("test").get();
@@ -56,10 +53,12 @@ app.get("/test-firestore", async (_req: Request, res: Response) => {
   }
 });
 
-// Start server
-app.listen(8000, "0.0.0.0",() => {
-  console.log("🔥 Server started on http://localhost:8000");
+// IMPORTANT FOR RENDER
+const PORT = Number(process.env.PORT) || 8000;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🔥 Server started on port ${PORT}`);
 });
 
-// Export as a Firebase Function
+// Firebase Function export
 export const api = functions.https.onRequest(app);
