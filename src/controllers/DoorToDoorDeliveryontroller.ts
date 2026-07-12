@@ -19,7 +19,7 @@ const uploadImage = async (file: Express.Multer.File): Promise<string> => {
   return uploadResponse.secure_url;
 };
 
-export const createMyDelivery = async (
+export const createMyDoorToDoorDelivery = async (
   req: Request,
   res: Response
 ): Promise<Response> => {
@@ -35,7 +35,7 @@ export const createMyDelivery = async (
     if (!sender?.address || !receiver?.address) {
       return res
         .status(400)
-        .json({ message: "Sender & receiver address required" });
+        .json({ message: "Door to Door Sender & receiver address required" });
     }
 
     if (
@@ -84,7 +84,7 @@ export const createMyDelivery = async (
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
-  const ref = await db.collection("delivery").add(delivery);
+  const ref = await db.collection("doorToDoorDelivery").add(delivery);
 
 // 🔥 Fetch the created document
 const doc = await ref.get();
@@ -97,13 +97,13 @@ return res.status(201).json({
   lastUpdated: data?.lastUpdated?.toDate?.() ?? null,
 });
   } catch (error) {
-    return res.status(500).json({ message: "Failed to create delivery" });
+    return res.status(500).json({ message: "Failed to create door to door delivery" });
   }
 };
 
 
 /* ================= PAYSTACK CHECKOUT ================= */
-export const createDeliveryCheckoutSession = async (
+export const createDoorToDoorDeliveryCheckoutSession = async (
   req: Request,
   res: Response
 ): Promise<Response> => {
@@ -114,10 +114,10 @@ export const createDeliveryCheckoutSession = async (
       return res.status(400).json({ message: "Missing deliveryId" });
     }
 
-    const deliverySnap = await db.collection("delivery").doc(deliveryId).get();
+    const deliverySnap = await db.collection("doorToDoorDelivery").doc(deliveryId).get();
 
     if (!deliverySnap.exists) {
-      return res.status(404).json({ message: "Delivery not found" });
+      return res.status(404).json({ message: "ooor to dooe delivery not found" });
     }
 
     const deliveryData = deliverySnap.data();
@@ -132,7 +132,7 @@ export const createDeliveryCheckoutSession = async (
         email: req.body.email ?? "fallback@test.com",
         amount: Math.round(Number(deliveryData.price) * 100),
         reference: `DELIVERY_${deliveryId}_${Date.now()}`,
-        callback_url: `godiyaoni://delivery/${deliveryId}`,
+        callback_url: `godiyaoni://doorToDoorDelivery/${deliveryId}`,
 
         metadata: {
           deliveryId,
@@ -155,17 +155,17 @@ export const createDeliveryCheckoutSession = async (
 };
 
 /* ================= GET DELIVERY BY ID ================= */
-export const getDeliveryById = async (
+export const getDoorToDoorDeliveryById = async (
   req: Request,
   res: Response
 ): Promise<Response> => {
   try {
     const { deliveryId } = req.params;
 
-    const doc = await db.collection("delivery").doc(deliveryId).get();
+    const doc = await db.collection("doorToDoorDelivery").doc(deliveryId).get();
 
     if (!doc.exists) {
-      return res.status(404).json({ message: "Delivery not found" });
+      return res.status(404).json({ message: "door to door Delivery not found" });
     }
 
     return res.json({
@@ -173,12 +173,12 @@ export const getDeliveryById = async (
       ...doc.data(),
     });
   } catch (error) {
-    return res.status(500).json({ message: "Failed to fetch delivery" });
+    return res.status(500).json({ message: "Failed to fetch door to door delivery" });
   }
 };
 
 /* ================= PAYSTACK WEBHOOK ================= */
-export const paystackDeliveryWebhookHandler = async (
+export const paystackDoorToDoorDeliveryWebhookHandler = async (
   req: Request,
   res: Response
 ): Promise<Response> => {
@@ -204,7 +204,7 @@ export const paystackDeliveryWebhookHandler = async (
       const deliveryId = event.data.metadata?.deliveryId;
 
       if (deliveryId) {
-        await db.collection("delivery").doc(deliveryId).update({
+        await db.collection("doorToDoorDelivery").doc(deliveryId).update({
           status: "paid",
           paymentReference: event.data.reference,
           lastUpdated: firestore.Timestamp.now(),

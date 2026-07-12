@@ -8,9 +8,11 @@ import { v2 as cloudinary } from "cloudinary";
 import MyRestaurantRoute from "./routes/MyRestaurantRoute";
 import OrderRoutes from "./routes/OrderRoute";
 import RestaurantRoutes from "./routes/RestaurantRoutes";
-import DeliveryRoutes from "./routes/DeliveryRoute";
-import DeliveryOrderRoute from "./routes/DeliveryOrderRoute";
+import PickUpDeliveryRoutes from "./routes/PickUpDeliveryRoute";
+import LogisticsHistoryRoutes from "./routes/LogisticsHistoryRoutes";
 import AdminRoute from "./routes/AdminRoute";
+import DoorToDoorDeliveryRoutes from "./routes/DoorToDoorDeliveryRoutes";
+import WayBillDeliveryRoutes from "./routes/WayBillDeliveryRoutes";
 
 // Cloudinary Configuration
 cloudinary.config({
@@ -36,8 +38,11 @@ app.use("/api/my/user", MyUserRoute);
 app.use("/api/my/restaurant", MyRestaurantRoute);
 app.use("/api/restaurant", RestaurantRoutes);
 app.use("/api/order", OrderRoutes);
-app.use("/api/delivery", DeliveryRoutes);
-app.use("/api/delivery", DeliveryOrderRoute);
+app.use("/api/pickUpDelivery", PickUpDeliveryRoutes);
+app.use("/api/doorToDoorDelivery", DoorToDoorDeliveryRoutes);
+app.use("/api/motroParkDelivery", DoorToDoorDeliveryRoutes);
+app.use("/api/wayBillDelivery", WayBillDeliveryRoutes);
+app.use("/api/delivery", LogisticsHistoryRoutes);
 
 // Firestore test
 const db = admin.firestore();

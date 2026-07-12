@@ -5,14 +5,23 @@ export const parseFormDataJson = (
   res: Response,
   next: NextFunction
 ): void => {
-  if (req.body?.data) {
-    try {
-      req.body = JSON.parse(req.body.data);
-    } catch {
-      res.status(400).json({ message: "Invalid JSON data" });
-      return;
-    }
-  }
+  try {
+    const body = req.body as any;
 
-  next();
+    if (body.cuisines && typeof body.cuisines === "string") {
+      body.cuisines = JSON.parse(body.cuisines);
+    }
+
+    if (body.menuItem && typeof body.menuItem === "string") {
+      body.menuItem = JSON.parse(body.menuItem);
+    }
+
+    if (body.restaurantAddress && typeof body.restaurantAddress === "string") {
+      body.restaurantAddress = JSON.parse(body.restaurantAddress);
+    }
+
+    next();
+  } catch {
+    res.status(400).json({ message: "Invalid JSON format in form data" });
+  }
 };

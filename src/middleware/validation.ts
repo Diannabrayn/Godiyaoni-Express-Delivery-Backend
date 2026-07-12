@@ -28,6 +28,7 @@ export const validateMyUserRequest = [
   handleValidationErrors,
 ];
 
+// validation.ts - Updated validateMyRestaurantrequest
 export const validateMyRestaurantrequest = [
   body("restaurantName").notEmpty().withMessage("restaurant name is required!"),
   body("city").notEmpty().withMessage("city name is required!"),
@@ -46,19 +47,24 @@ export const validateMyRestaurantrequest = [
     .not()
     .isEmpty()
     .withMessage("sorry! cuisines cannot be empty"),
-  body("menuItem")
-    .isArray({ min: 1 })
-    .withMessage("sorry menu items cannot be empty!"),
+body("menuItem")
+  .custom((value) => {
+    if (!Array.isArray(value)) {
+      throw new Error("menu items must be an array");
+    }
+    return true;
+  }),
   body("menuItem.*.name")
     .notEmpty()
     .withMessage("Each menu item must have a name!"),
-  body("menuItem.*.price")
-  .isFloat({min:0})
+ body("menuItem.*.price")
+  .toFloat()
+  .isFloat({ min: 1 })
     .withMessage("Each menu item price must be a positive number!"),
   handleValidationErrors,
 ];
 
-export const validateDeliveryRequest = [
+export const validatePickUpDeliveryRequest = [
   // Sender validations
   body("sender.name")
     .isString()
@@ -116,3 +122,176 @@ export const validateDeliveryRequest = [
   handleValidationErrors,
 ];
 
+export const validateDoorToDoorDeliveryRequest = [
+  // Sender validations
+  body("sender.name")
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage("Sender name is required"),
+  body("sender.phone")
+    .isNumeric()
+    .withMessage("Sender phone is required")
+    .isLength({ min: 11 }),
+  // Receiver validations
+  body("receiver.name")
+    .isString()
+    .trim()
+    .isLength({ min: 3 })
+    .withMessage("Receiver name is required"),
+  body("receiver.phone")
+    .isNumeric()
+    .isLength({ min: 11 })
+    .withMessage("Receiver phone is required"),
+
+  // Package validations
+  body("package.description")
+    .isString()
+    .isLength({ min: 3 })
+    .withMessage("Package description must be at least 3 characters"),
+  body("package.weight")
+    .notEmpty()
+    .withMessage("Package weight is required")
+    .isFloat({ min: 0.1 }),
+  body("package.value")
+    .notEmpty()
+    .withMessage("Package value is required")
+    .isFloat({ min: 0 }),
+  // Delivery type
+  body("deliveryType")
+    .isIn(["standard", "express", "same-day"])
+    .withMessage("Delivery type must be one of: standard, express, same-day"),
+
+  // Addresses
+  body("pickupAddress")
+    .isString()
+    .isLength({ min: 3 })
+    .withMessage("Pickup address must be at least 3 characters"),
+  body("dropoffAddress")
+    .isString()
+    .isLength({ min: 3 })
+    .withMessage("Dropoff address must be at least 3 characters"),
+  // Optionally validate imageUrl if passed
+  body("imageUrl")
+    .optional()
+    .isString()
+    .withMessage("Image URL must be a string"),
+
+  handleValidationErrors,
+];
+
+export const validateMotorParkDeliveryRequest = [
+  // Sender validations
+  body("sender.name")
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage("Sender name is required"),
+  body("sender.phone")
+    .isNumeric()
+    .withMessage("Sender phone is required")
+    .isLength({ min: 11 }),
+  // Receiver validations
+  body("receiver.name")
+    .isString()
+    .trim()
+    .isLength({ min: 3 })
+    .withMessage("Receiver name is required"),
+  body("receiver.phone")
+    .isNumeric()
+    .isLength({ min: 11 })
+    .withMessage("Receiver phone is required"),
+
+  // Package validations
+  body("package.description")
+    .isString()
+    .isLength({ min: 3 })
+    .withMessage("Package description must be at least 3 characters"),
+  body("package.weight")
+    .notEmpty()
+    .withMessage("Package weight is required")
+    .isFloat({ min: 0.1 }),
+  body("package.value")
+    .notEmpty()
+    .withMessage("Package value is required")
+    .isFloat({ min: 0 }),
+  // Delivery type
+  body("deliveryType")
+    .isIn(["standard", "express", "same-day"])
+    .withMessage("Delivery type must be one of: standard, express, same-day"),
+
+  // Addresses
+  body("pickupAddress")
+    .isString()
+    .isLength({ min: 3 })
+    .withMessage("Pickup address must be at least 3 characters"),
+  body("dropoffAddress")
+    .isString()
+    .isLength({ min: 3 })
+    .withMessage("Dropoff address must be at least 3 characters"),
+  // Optionally validate imageUrl if passed
+  body("imageUrl")
+    .optional()
+    .isString()
+    .withMessage("Image URL must be a string"),
+
+  handleValidationErrors,
+];
+
+export const validateWayBillDeliveryRequest = [
+  // Sender validations
+  body("sender.name")
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage("Sender name is required"),
+  body("sender.phone")
+    .isNumeric()
+    .withMessage("Sender phone is required")
+    .isLength({ min: 11 }),
+  // Receiver validations
+  body("receiver.name")
+    .isString()
+    .trim()
+    .isLength({ min: 3 })
+    .withMessage("Receiver name is required"),
+  body("receiver.phone")
+    .isNumeric()
+    .isLength({ min: 11 })
+    .withMessage("Receiver phone is required"),
+
+  // Package validations
+  body("package.description")
+    .isString()
+    .isLength({ min: 3 })
+    .withMessage("Package description must be at least 3 characters"),
+  body("package.weight")
+    .notEmpty()
+    .withMessage("Package weight is required")
+    .isFloat({ min: 0.1 }),
+  body("package.value")
+    .notEmpty()
+    .withMessage("Package value is required")
+    .isFloat({ min: 0 }),
+  // Delivery type
+  body("deliveryType")
+    .isIn(["standard", "express", "same-day"])
+    .withMessage("Delivery type must be one of: standard, express, same-day"),
+
+  // Addresses
+  body("pickupAddress")
+    .isString()
+    .isLength({ min: 3 })
+    .withMessage("Pickup address must be at least 3 characters"),
+  body("dropoffAddress")
+    .isString()
+    .isLength({ min: 3 })
+    .withMessage("Dropoff address must be at least 3 characters"),
+  // Optionally validate imageUrl if passed
+  body("imageUrl")
+    .optional()
+    .isString()
+    .withMessage("Image URL must be a string"),
+
+  handleValidationErrors,
+];

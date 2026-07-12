@@ -107,28 +107,52 @@ const createAdminRestaurant = async (req: Request, res: Response) => {
   try {
     await assertAdminOrManager(req.firebaseId);
 
+    const body = req.body as any;
+
     const {
       restaurantName,
       city,
       country,
-      restaurantAddress,
       deliveryPrice,
       estimatedDeliveryTime,
       cuisines,
       menuItem,
-    } = req.body;
+    } = body;
 
-    // ✅ Parse address AFTER destructuring
+    // ✅ Parse address
     const parsedAddress =
-      typeof restaurantAddress === "string"
-        ? JSON.parse(restaurantAddress)
-        : restaurantAddress;
+      typeof body.restaurantAddress === "string"
+        ? JSON.parse(body.restaurantAddress)
+        : body.restaurantAddress;
+
+    // ✅ FILE HANDLING
+    const files = req.files as Express.Multer.File[];
 
     let imageUrl = "";
-    if (req.file) {
-      imageUrl = await uploadImage(req.file as Express.Multer.File);
+
+    // Restaurant image
+    const restaurantImage = files?.find(
+      (f) => f.fieldname === "imageFile"
+    );
+
+    if (restaurantImage) {
+      imageUrl = await uploadImage(restaurantImage);
     }
 
+    // Menu images
+    const menuImagesMap: Record<number, string> = {};
+
+    if (files && files.length > 0) {
+      for (const file of files) {
+        if (file.fieldname.startsWith("menuImage_")) {
+          const index = Number(file.fieldname.split("_")[1]);
+          const uploadedUrl = await uploadImage(file);
+          menuImagesMap[index] = uploadedUrl;
+        }
+      }
+    }
+
+    // ✅ CREATE RESTAURANT
     const restaurantRef = db.collection("restaurant").doc();
 
     const newRestaurant: Restaurant = {
@@ -153,16 +177,20 @@ const createAdminRestaurant = async (req: Request, res: Response) => {
       deliveryPrice: Number(deliveryPrice),
 
       cuisines: Array.isArray(cuisines) ? cuisines : [cuisines],
+
       cuisinesLower: Array.isArray(cuisines)
         ? cuisines.map((c: string) => c.toLowerCase())
         : [cuisines.toLowerCase()],
 
-      menuItem: (menuItem || []).map((item: any) => ({
+      // ✅ FIXED MENU ITEMS
+      menuItem: (menuItem || []).map((item: any, index: number) => ({
         id: item.id || crypto.randomUUID(),
         name: item.name,
         nameLower: item.name.toLowerCase(),
         price: Number(item.price),
-        imageUrl: item.imageUrl || "",
+
+        // 🔥 THIS IS THE FIX
+        imageUrl: menuImagesMap[index] || item.imageUrl || "",
       })),
 
       imageUrl,
@@ -170,6 +198,7 @@ const createAdminRestaurant = async (req: Request, res: Response) => {
     };
 
     await restaurantRef.set(newRestaurant);
+
     return res.status(201).json(newRestaurant);
   } catch (error: any) {
     if (error.message === "UNAUTHORIZED" || error.message === "FORBIDDEN") {
@@ -206,69 +235,99 @@ const updateAdminRestaurant = async (req: Request, res: Response) => {
 
     const existingRestaurant = restaurantDoc.data() as Restaurant;
 
-    // ✅ Parse address AFTER existingRestaurant exists
-    const parsedAddress = req.body.address
-      ? typeof req.body.address === "string"
-        ? JSON.parse(req.body.address)
-        : req.body.address
+    const body = req.body as any;
+
+    // ✅ Parse address
+    const parsedAddress = body.restaurantAddress
+      ? typeof body.restaurantAddress === "string"
+        ? JSON.parse(body.restaurantAddress)
+        : body.restaurantAddress
       : existingRestaurant.address;
 
+    // ✅ FILE HANDLING STARTS HERE
+    const files = req.files as Express.Multer.File[];
+
+    let restaurantImageUrl = existingRestaurant.imageUrl;
+
+    // Restaurant image
+    const restaurantImage = files?.find(
+      (f) => f.fieldname === "imageFile"
+    );
+
+    if (restaurantImage) {
+      restaurantImageUrl = await uploadImage(restaurantImage);
+    }
+
+    // Menu images
+    const menuImagesMap: Record<number, string> = {};
+
+    if (files && files.length > 0) {
+      for (const file of files) {
+        if (file.fieldname.startsWith("menuImage_")) {
+          const index = Number(file.fieldname.split("_")[1]);
+          const imageUrl = await uploadImage(file);
+          menuImagesMap[index] = imageUrl;
+        }
+      }
+    }
+
+    // ✅ UPDATE OBJECT
     const updatedRestaurant: Restaurant = {
       ...existingRestaurant,
 
       restaurantName:
-        req.body.restaurantName ?? existingRestaurant.restaurantName,
-      restaurantNameLower: req.body.restaurantName
-        ? req.body.restaurantName.toLowerCase()
+        body.restaurantName ?? existingRestaurant.restaurantName,
+
+      restaurantNameLower: body.restaurantName
+        ? body.restaurantName.toLowerCase()
         : existingRestaurant.restaurantNameLower,
 
       address: parsedAddress,
 
-      city: req.body.city ?? existingRestaurant.city,
-      cityLower: req.body.city
-        ? req.body.city.toLowerCase()
+      city: body.city ?? existingRestaurant.city,
+      cityLower: body.city
+        ? body.city.toLowerCase()
         : existingRestaurant.cityLower,
 
-      country: req.body.country ?? existingRestaurant.country,
+      country: body.country ?? existingRestaurant.country,
 
-      deliveryPrice: req.body.deliveryPrice
-        ? Number(req.body.deliveryPrice)
+      deliveryPrice: body.deliveryPrice
+        ? Number(body.deliveryPrice)
         : existingRestaurant.deliveryPrice,
 
-      deliveryTimeMinutes: req.body.estimatedDeliveryTime
-        ? Number(req.body.estimatedDeliveryTime)
+      deliveryTimeMinutes: body.estimatedDeliveryTime
+        ? Number(body.estimatedDeliveryTime)
         : existingRestaurant.deliveryTimeMinutes,
 
-      cuisines: req.body.cuisines
-        ? Array.isArray(req.body.cuisines)
-          ? req.body.cuisines
-          : [req.body.cuisines]
+      cuisines: body.cuisines
+        ? Array.isArray(body.cuisines)
+          ? body.cuisines
+          : [body.cuisines]
         : existingRestaurant.cuisines,
 
-      cuisinesLower: req.body.cuisines
-        ? Array.isArray(req.body.cuisines)
-          ? req.body.cuisines.map((c: string) => c.toLowerCase())
-          : [req.body.cuisines.toLowerCase()]
+      cuisinesLower: body.cuisines
+        ? Array.isArray(body.cuisines)
+          ? body.cuisines.map((c: string) => c.toLowerCase())
+          : [body.cuisines.toLowerCase()]
         : existingRestaurant.cuisinesLower,
 
-      menuItem: req.body.menuItem
-        ? req.body.menuItem.map((item: any) => ({
+      menuItem: body.menuItem
+        ? body.menuItem.map((item: any, index: number) => ({
             id: item.id || crypto.randomUUID(),
             name: item.name,
             nameLower: item.name.toLowerCase(),
             price: Number(item.price),
-            imageUrl: item.imageUrl || "",
+
+            // ✅ KEY FIX
+            imageUrl:
+              menuImagesMap[index] || item.imageUrl || "",
           }))
         : existingRestaurant.menuItem,
 
+      imageUrl: restaurantImageUrl,
+
       lastUpdated: firestore.Timestamp.fromDate(new Date()),
     };
-
-    if (req.file) {
-      updatedRestaurant.imageUrl = await uploadImage(
-        req.file as Express.Multer.File
-      );
-    }
 
     await db
       .collection("restaurant")

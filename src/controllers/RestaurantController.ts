@@ -41,7 +41,6 @@ export const getRestaurant = async (req: Request, res: Response) => {
 };
 
 
-
 export const searchRestaurants = async (req: Request, res: Response) => {
   try {
     const city = (req.params.city || "").trim().toLowerCase();
@@ -73,7 +72,11 @@ export const searchRestaurants = async (req: Request, res: Response) => {
 
     // Filter by cuisines
     if (selectedCuisines.length > 0) {
-      query = query.where("cuisines", "array-contains-any", selectedCuisines);
+      query = query.where(
+  "cuisinesLower",
+  "array-contains-any",
+  selectedCuisines.map(c => c.toLowerCase())
+);
     }
 
     // Filter by restaurant name

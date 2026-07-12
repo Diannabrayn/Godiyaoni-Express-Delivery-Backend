@@ -4,6 +4,7 @@ import { firebaseAuth } from "../middleware/auth";
 import AdminController from "../controllers/AdminController";
 import multer from "multer";
 import { validateMyRestaurantrequest } from "../middleware/validation";
+import { parseFormDataJson } from "../parsedFormData";
 
 const router = express.Router();
 
@@ -11,7 +12,7 @@ const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024,
+    fileSize: 10 * 1024 * 1024, 
   },
 })
 
@@ -20,7 +21,8 @@ router.get("/", firebaseAuth, AdminController.getAdmin);
 router.post(
   "/restaurant",
   firebaseAuth,
-  upload.single("image"),
+  upload.any(),
+  parseFormDataJson,
   validateMyRestaurantrequest,
   AdminController.createAdminRestaurant
 );
@@ -28,7 +30,8 @@ router.post(
 router.put(
   "/restaurant/:restaurantId",
   firebaseAuth,
-  upload.single("imageFile"),
+  upload.any(),
+  parseFormDataJson,
   validateMyRestaurantrequest,
   AdminController.updateAdminRestaurant
 );
@@ -53,13 +56,13 @@ router.patch(
 );
 
 router.get(
-  "/restaurants",
+  "/restaurant",
   firebaseAuth,
   AdminController.getAdminRestaurant
 );
 
 router.get(
-  "/restaurantsss",
+  "/restaurant",
   firebaseAuth,
   AdminController.getRestaurantsWithOrders
 );

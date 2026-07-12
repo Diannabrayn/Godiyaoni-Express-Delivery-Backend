@@ -1,10 +1,10 @@
 import { Request, Response, NextFunction } from "express";
 import express from "express";
-import {createDeliveryCheckoutSession, createMyDelivery, getDeliveryById, paystackDeliveryWebhookHandler, } from "../controllers/DeliveryController";
-import { validateDeliveryRequest } from "../middleware/validation";
+import { validatePickUpDeliveryRequest } from "../middleware/validation";
 import multer from "multer";
 import { firebaseAuth } from "../middleware/auth";
 import { parseFormDataJson } from "../parsedFormData";
+import { createMyPickUpDelivery, createPickUpDeliveryCheckoutSession, getPickUpDeliveryById, paystackPickUpDeliveryWebhookHandler } from "../controllers/PickUpDeliveryController";
 
 
 const router = express.Router();
@@ -36,26 +36,26 @@ router.post(
   },
   firebaseAuth,
   parseFormDataJson,
-  validateDeliveryRequest,
-  createMyDelivery
+  validatePickUpDeliveryRequest,
+  createMyPickUpDelivery
 );
 
 router.get(
   "/:deliveryId",
   firebaseAuth,
-  getDeliveryById
+  getPickUpDeliveryById
 );
 
 router.post(
   "/checkout/create-checkout-session/:deliveryId",
   firebaseAuth,
-  createDeliveryCheckoutSession
+  createPickUpDeliveryCheckoutSession
 );
 
 
 router.post(
   "/paystack/webhook",
   express.raw({ type: "application/json" }), // ✅ important
-  paystackDeliveryWebhookHandler
+  paystackPickUpDeliveryWebhookHandler
 );
 export default router;
